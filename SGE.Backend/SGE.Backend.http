@@ -1,0 +1,6 @@
+@SGE.Backend_HostAddress = http://localhost:5073
+
+GET {{SGE.Backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
