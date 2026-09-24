@@ -1,4 +1,4 @@
-﻿using SGE.Backend.DTOs;
+﻿using SGE.Backend.DTOs.Auth;
 
 namespace SGE.Backend.Services
 {

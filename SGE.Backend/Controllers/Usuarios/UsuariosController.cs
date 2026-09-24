@@ -2,11 +2,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SGE.Backend.Data;
-using SGE.Backend.DTOs;
 using SGE.Backend.Models;
 using BCrypt.Net;
+using SGE.Backend.DTOs.Usuarios;
 
-namespace SGE.Backend.Controllers
+namespace SGE.Backend.Controllers.Usuarios
 {
     [ApiController]
     [Route("api/[controller]")]

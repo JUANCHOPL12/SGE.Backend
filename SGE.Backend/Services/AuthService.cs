@@ -4,7 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SGE.Backend.Data;
-using SGE.Backend.DTOs;
+using SGE.Backend.DTOs.Auth;
 using SGE.Backend.Models;
 
 namespace SGE.Backend.Services

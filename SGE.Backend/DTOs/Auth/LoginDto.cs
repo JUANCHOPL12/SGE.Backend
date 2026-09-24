@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace SGE.Backend.DTOs
+namespace SGE.Backend.DTOs.Auth
 {
     public class LoginDto
     {

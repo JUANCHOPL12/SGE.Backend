@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using SGE.Backend.DTOs;
+using SGE.Backend.DTOs.Auth;
 using SGE.Backend.Services;
 
-namespace SGE.Backend.Controllers
+namespace SGE.Backend.Controllers.Auth
 {
     [ApiController]
     [Route("api/[controller]")]
