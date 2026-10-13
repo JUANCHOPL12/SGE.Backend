@@ -10,7 +10,7 @@ namespace SGE.Backend.Controllers.Estudiantes
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // RNF-08: Restricción por sesiones y roles (RBAC)
+    [Authorize] // RNF-08: Restricción por sesiones y roles dsds(RBAC)
     public class EstudiantesController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
