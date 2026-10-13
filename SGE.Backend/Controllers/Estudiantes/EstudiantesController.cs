@@ -82,7 +82,7 @@ namespace SGE.Backend.Controllers.Estudiantes
             return Ok(dto);
         }
 
-        // 3. Crear Estudiante y vincular Equipo (RF-05, RF-06)
+        // 3. Crear Estudiante (RF-05) y vincular Equipo Opcional (RF-06)
         [HttpPost]
         [Authorize(Roles = "Administrador,SuperAdmin")]
         public async Task<ActionResult> CreateEstudiante([FromBody] EstudianteCreateUpdateDto dto)
@@ -107,16 +107,18 @@ namespace SGE.Backend.Controllers.Estudiantes
             _context.Estudiantes.Add(estudiante);
             await _context.SaveChangesAsync();
 
-            // Si se envió un serial, vinculamos el equipo en la tabla 'equipos'
-            if (!string.IsNullOrEmpty(dto.SerialEquipo))
+            // Guardar equipo SOLO SI el serial no está vacío Y se enviaron IDs de marca y tipo mayores a 0
+            if (!string.IsNullOrWhiteSpace(dto.SerialEquipo)
+                && dto.IdMarca.HasValue && dto.IdMarca.Value > 0
+                && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
             {
                 var equipo = new Equipo
                 {
                     IdEstudiante = estudiante.IdEstudiante,
                     Serial = dto.SerialEquipo,
-                    IdMarca = dto.IdMarca,
-                    IdTipo = dto.IdTipo,
-                    FotoEquipoUrl = dto.FotoEquipoUrl,
+                    IdMarca = dto.IdMarca.Value,
+                    IdTipo = dto.IdTipo.Value,
+                    FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
                     Estado = "Activo"
                 };
 
@@ -126,8 +128,7 @@ namespace SGE.Backend.Controllers.Estudiantes
 
             return CreatedAtAction(nameof(GetEstudiantePorDocumento), new { documento = estudiante.NumeroDocumento }, dto);
         }
-
-        // 4. Actualizar datos de Estudiante y su Equipo (RF-05, RF-06)
+        // 4. Actualizar datos de Estudiante y su Equipo Opcional (RF-05, RF-06)
         [HttpPut("{id}")]
         [Authorize(Roles = "Administrador,SuperAdmin")]
         public async Task<IActionResult> UpdateEstudiante(int id, [FromBody] EstudianteCreateUpdateDto dto)
@@ -149,29 +150,23 @@ namespace SGE.Backend.Controllers.Estudiantes
             estudiante.IdCarrera = dto.IdCarrera;
             estudiante.FotoPerfilUrl = dto.FotoPerfilUrl ?? estudiante.FotoPerfilUrl;
 
-            if (!string.IsNullOrEmpty(dto.SerialEquipo))
+            // Actualizar o crear equipo solo si vienen los datos completos
+            if (!string.IsNullOrWhiteSpace(dto.SerialEquipo)
+     && dto.IdMarca.HasValue && dto.IdMarca.Value > 0
+     && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
             {
-                var equipo = estudiante.Equipos.FirstOrDefault();
-                if (equipo != null)
+                var equipo = new Equipo
                 {
-                    equipo.Serial = dto.SerialEquipo;
-                    equipo.IdMarca = dto.IdMarca;
-                    equipo.IdTipo = dto.IdTipo;
-                    equipo.FotoEquipoUrl = dto.FotoEquipoUrl ?? equipo.FotoEquipoUrl;
-                }
-                else
-                {
-                    var nuevoEquipo = new Equipo
-                    {
-                        IdEstudiante = estudiante.IdEstudiante,
-                        Serial = dto.SerialEquipo,
-                        IdMarca = dto.IdMarca,
-                        IdTipo = dto.IdTipo,
-                        FotoEquipoUrl = dto.FotoEquipoUrl,
-                        Estado = "Activo"
-                    };
-                    _context.Equipos.Add(nuevoEquipo);
-                }
+                    IdEstudiante = estudiante.IdEstudiante,
+                    Serial = dto.SerialEquipo,
+                    IdMarca = dto.IdMarca.Value,
+                    IdTipo = dto.IdTipo.Value,
+                    FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
+                    Estado = "Activo"
+                };
+
+                _context.Equipos.Add(equipo);
+                await _context.SaveChangesAsync();
             }
 
             await _context.SaveChangesAsync();
