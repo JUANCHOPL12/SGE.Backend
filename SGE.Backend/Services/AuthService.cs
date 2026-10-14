@@ -43,7 +43,7 @@ namespace SGE.Backend.Services
             // 4. Genera el Token JWT con los Claims necesarios para RBAC (RNF-08)
             string token = GenerarJwtToken(usuario);
 
-            // 5. Retorna la respuesta con el Token y la información delLL perfil
+            // 5. Retorna la respuesta con el Tokennnn y la información delLL perfil
             return new LoginResponseDto
             {
                 Token = token,
