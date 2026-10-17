@@ -7,7 +7,7 @@ namespace SGE.Backend.DTOs.Accesos
         [Required(ErrorMessage = "El identificador del estudiante es obligatorio.")]
         public int IdEstudiante { get; set; }
 
-        // Puede ser nulo si el estudiante ingresa sin equipo
+        // Puede ser nulo si el estudiante ingresa sin ()equipo
         public int? IdEquipo { get; set; }
 
         [Required(ErrorMessage = "El identificador de la portería es obligatorio.")]
