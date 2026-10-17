@@ -1,4 +1,4 @@
-using System.Text;
+Ôªøusing System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,13 +18,31 @@ namespace SGE.Backend
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            // 2. Registro de InyecciÛn de Dependencias
+            // =========================================================================
+            // 2. CONFIGURACI√ìN DE CORS (Soluci√≥n al error Cross-Origin en Blazor WASM)
+            // =========================================================================
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowBlazorApp", policy =>
+                {
+                    policy.WithOrigins(
+                            "http://localhost:5232",  // Puerto actual de tu Frontend Blazor
+                            "https://localhost:7243",
+                            "https://localhost:7000"
+                          )
+                          .AllowAnyHeader()
+                          .AllowAnyMethod()
+                          .AllowCredentials();
+                });
+            });
+
+            // 3. Registro de Inyecci√≥n de Dependencias
             builder.Services.AddScoped<IAuthService, AuthService>();
 
-            // 3. Controladores
+            // 4. Controladores
             builder.Services.AddControllers();
 
-            // 4. ConfiguraciÛn del Esquema de AutenticaciÛn JWT Bearer (RNF-08)
+            // 5. Configuraci√≥n del Esquema de Autenticaci√≥n JWT Bearer (RNF-08)
             var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Clave JWT no configurada.");
             builder.Services.AddAuthentication(options =>
             {
@@ -45,13 +63,12 @@ namespace SGE.Backend
                 };
             });
 
-            // 5. ConfiguraciÛn de Swagger UI con soporte para el botÛn "Authorize"
+            // 6. Configuraci√≥n de Swagger UI con soporte para el bot√≥n "Authorize"
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "SGE Backend API", Version = "v1" });
 
-                // Habilita la caja de texto para ingresar el token en la interfaz de Swagger
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
                     Description = "Ingrese el token JWT en este formato: Bearer {tu_token}",
@@ -79,7 +96,7 @@ namespace SGE.Backend
 
             var app = builder.Build();
 
-            // 6. InicializaciÛn del DbSeeder (Genera datos iniciales como el usuario admin)
+            // 7. Inicializaci√≥n del DbSeeder (Genera datos iniciales como el usuario admin)
             using (var scope = app.Services.CreateScope())
             {
                 var services = scope.ServiceProvider;
@@ -91,21 +108,28 @@ namespace SGE.Backend
                 catch (Exception ex)
                 {
                     var logger = services.GetRequiredService<ILogger<Program>>();
-                    logger.LogError(ex, "OcurriÛ un error al ejecutar el DbSeeder.");
+                    logger.LogError(ex, "Ocurri√≥ un error al ejecutar el DbSeeder.");
                 }
             }
 
-            // 7. Middleware de Swagger
+            // 8. Middleware de Swagger
             app.UseSwagger();
             app.UseSwaggerUI(c =>
             {
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "SGE Backend API v1");
-                c.RoutePrefix = string.Empty; // Carga Swagger en la raÌz
+                c.RoutePrefix = string.Empty; // Carga Swagger en la ra√≠z
             });
 
             app.UseHttpsRedirection();
 
-            // 8. Habilitar AutenticaciÛn y AutorizaciÛn en el orden exacto
+            // =========================================================================
+            // 9. HABILITAR PIPELINE DE SEGURIDAD Y RED (ORDEN STRICTO)
+            // =========================================================================
+            app.UseRouting();
+
+            // ‚ö†Ô∏è IMPORTANTE: UseCors debe invocarse estrictamente ENTRE UseRouting y UseAuthentication
+            app.UseCors("AllowBlazorApp");
+
             app.UseAuthentication();
             app.UseAuthorization();
 
