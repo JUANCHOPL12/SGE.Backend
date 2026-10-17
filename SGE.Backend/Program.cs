@@ -63,7 +63,7 @@ namespace SGE.Backend
                 };
             });
 
-            // 6. Configuración de Swagger UI con soporte para el botón "Authorize"
+            // 6. Configuración de Swagger UI con soporte para el botón "Authorizeeee"
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
