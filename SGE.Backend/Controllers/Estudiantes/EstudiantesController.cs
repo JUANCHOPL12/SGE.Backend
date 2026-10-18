@@ -10,7 +10,7 @@ namespace SGE.Backend.Controllers.Estudiantes
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // RNF-08: Restricción por sesiones y roles dsds(RBAC)
+    [Authorize] // RNF-08: Restricción por sesiones y roles (RBAC)
     public class EstudiantesController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -40,6 +40,7 @@ namespace SGE.Backend.Controllers.Estudiantes
                     Estado = e.Estado,
                     FotoPerfilUrl = e.FotoPerfilUrl,
                     FotoEquipoUrl = e.Equipos.Select(eq => eq.FotoEquipoUrl).FirstOrDefault(),
+                    FotoAccesoriosUrl = e.Equipos.Select(eq => eq.FotoAccesoriosUrl).FirstOrDefault(),
                     SerialEquipo = e.Equipos.Select(eq => eq.Serial).FirstOrDefault(),
                     IdMarca = e.Equipos.Select(eq => (int?)eq.IdMarca).FirstOrDefault(),
                     IdTipo = e.Equipos.Select(eq => (int?)eq.IdTipo).FirstOrDefault()
@@ -61,7 +62,7 @@ namespace SGE.Backend.Controllers.Estudiantes
 
             if (estudiante == null)
             {
-                return NotFound(new { mensaje = "El número de documento no corresponde a un registro existente." }); // RNF-06
+                return NotFound(new { mensaje = "El número de documento no corresponde a un registro existente." });
             }
 
             var equipo = estudiante.Equipos.FirstOrDefault();
@@ -75,6 +76,7 @@ namespace SGE.Backend.Controllers.Estudiantes
                 Estado = estudiante.Estado,
                 FotoPerfilUrl = estudiante.FotoPerfilUrl,
                 FotoEquipoUrl = equipo?.FotoEquipoUrl,
+                FotoAccesoriosUrl = equipo?.FotoAccesoriosUrl,
                 SerialEquipo = equipo?.Serial,
                 TieneEquipoRegistrado = equipo != null
             };
@@ -92,6 +94,9 @@ namespace SGE.Backend.Controllers.Estudiantes
                 return BadRequest(new { mensaje = "Ya existe un estudiante registrado con este documento." });
             }
 
+            // Procesar y guardar foto de perfil
+            var fotoPerfilRuta = GuardarImagenBase64(dto.FotoPerfilUrl, "estudiantes");
+
             var estudiante = new Estudiante
             {
                 NumeroDocumento = dto.Documento,
@@ -101,7 +106,7 @@ namespace SGE.Backend.Controllers.Estudiantes
                 CorreoElectronico = dto.Correo,
                 IdCarrera = dto.IdCarrera,
                 Estado = "Activo",
-                FotoPerfilUrl = dto.FotoPerfilUrl
+                FotoPerfilUrl = fotoPerfilRuta
             };
 
             _context.Estudiantes.Add(estudiante);
@@ -112,13 +117,17 @@ namespace SGE.Backend.Controllers.Estudiantes
                 && dto.IdMarca.HasValue && dto.IdMarca.Value > 0
                 && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
             {
+                var fotoEquipoRuta = GuardarImagenBase64(dto.FotoEquipoUrl, "equipos");
+                var fotoAccesoriosRuta = GuardarImagenBase64(dto.FotoAccesoriosUrl, "accesorios");
+
                 var equipo = new Equipo
                 {
                     IdEstudiante = estudiante.IdEstudiante,
                     Serial = dto.SerialEquipo,
                     IdMarca = dto.IdMarca.Value,
                     IdTipo = dto.IdTipo.Value,
-                    FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
+                    FotoEquipoUrl = fotoEquipoRuta ?? string.Empty,
+                    FotoAccesoriosUrl = fotoAccesoriosRuta ?? string.Empty,
                     Estado = "Activo"
                 };
 
@@ -128,7 +137,7 @@ namespace SGE.Backend.Controllers.Estudiantes
 
             return CreatedAtAction(nameof(GetEstudiantePorDocumento), new { documento = estudiante.NumeroDocumento }, dto);
         }
-        // 4. Actualizar datos de Estudiante y su Equipo Opcional (RF-05, RF-06)
+
         // 4. Actualizar datos de Estudiante y su Equipo Opcional (RF-05, RF-06)
         [HttpPut("{id}")]
         [Authorize(Roles = "Administrador,SuperAdmin")]
@@ -150,7 +159,12 @@ namespace SGE.Backend.Controllers.Estudiantes
             estudiante.Telefono = dto.Telefono;
             estudiante.CorreoElectronico = dto.Correo;
             estudiante.IdCarrera = dto.IdCarrera;
-            estudiante.FotoPerfilUrl = dto.FotoPerfilUrl ?? estudiante.FotoPerfilUrl;
+
+            // Procesar foto de perfil solo si se envió un valor nuevo
+            if (!string.IsNullOrWhiteSpace(dto.FotoPerfilUrl))
+            {
+                estudiante.FotoPerfilUrl = GuardarImagenBase64(dto.FotoPerfilUrl, "estudiantes") ?? estudiante.FotoPerfilUrl;
+            }
 
             // 2. Actualizar o Vincular Equipo
             if (!string.IsNullOrWhiteSpace(dto.SerialEquipo)
@@ -158,6 +172,8 @@ namespace SGE.Backend.Controllers.Estudiantes
                 && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
             {
                 var equipoExistente = estudiante.Equipos.FirstOrDefault();
+                var fotoEquipoRuta = GuardarImagenBase64(dto.FotoEquipoUrl, "equipos");
+                var fotoAccesoriosRuta = GuardarImagenBase64(dto.FotoAccesoriosUrl, "accesorios");
 
                 if (equipoExistente != null)
                 {
@@ -165,7 +181,14 @@ namespace SGE.Backend.Controllers.Estudiantes
                     equipoExistente.Serial = dto.SerialEquipo;
                     equipoExistente.IdMarca = dto.IdMarca.Value;
                     equipoExistente.IdTipo = dto.IdTipo.Value;
-                    equipoExistente.FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(fotoEquipoRuta))
+                    {
+                        equipoExistente.FotoEquipoUrl = fotoEquipoRuta;
+                    }
+                    if (!string.IsNullOrWhiteSpace(fotoAccesoriosRuta))
+                    {
+                        equipoExistente.FotoAccesoriosUrl = fotoAccesoriosRuta;
+                    }
                 }
                 else
                 {
@@ -176,7 +199,8 @@ namespace SGE.Backend.Controllers.Estudiantes
                         Serial = dto.SerialEquipo,
                         IdMarca = dto.IdMarca.Value,
                         IdTipo = dto.IdTipo.Value,
-                        FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
+                        FotoEquipoUrl = fotoEquipoRuta ?? string.Empty,
+                        FotoAccesoriosUrl = fotoAccesoriosRuta ?? string.Empty,
                         Estado = "Activo"
                     };
                     _context.Equipos.Add(nuevoEquipo);
@@ -207,6 +231,44 @@ namespace SGE.Backend.Controllers.Estudiantes
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = $"Estado del estudiante actualizado a {nuevoEstado}." });
+        }
+
+        // =========================================================================
+        // HELPER PRIVATE METHOD: Convierte imágenes Base64 a archivos en disco
+        // =========================================================================
+        private string? GuardarImagenBase64(string? base64String, string carpeta)
+        {
+            if (string.IsNullOrWhiteSpace(base64String))
+                return null;
+
+            // Si ya viene como URL fija o relativa, se deja intacta
+            if (!base64String.StartsWith("data:image"))
+                return base64String;
+
+            try
+            {
+                var base64Data = base64String.Split(',')[1];
+                var bytes = Convert.FromBase64String(base64Data);
+
+                var folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", carpeta);
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                var fileName = $"{Guid.NewGuid()}.jpg";
+                var filePath = Path.Combine(folderPath, fileName);
+
+                System.IO.File.WriteAllBytes(filePath, bytes);
+
+                // Construye la URL completa incluyendo protocolo, puerto y servidor (ej: https://localhost:7243/uploads/estudiantes/guid.jpg)
+                var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                return $"{baseUrl}/uploads/{carpeta}/{fileName}";
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

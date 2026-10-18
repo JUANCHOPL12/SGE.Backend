@@ -42,6 +42,10 @@ public class Equipo
     [ForeignKey(nameof(IdMarca))]
     public MarcaEquipo? Marca { get; set; }
 
+    [StringLength(255)]
+    [Column("foto_accesorios_url")]
+    public string? FotoAccesoriosUrl { get; set; }
+
     public ICollection<AccesorioEquipo> Accesorios { get; set; } = new List<AccesorioEquipo>();
     public ICollection<RegistroAcceso> RegistrosAccesos { get; set; } = new List<RegistroAcceso>();
 }

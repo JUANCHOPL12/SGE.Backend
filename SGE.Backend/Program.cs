@@ -63,7 +63,7 @@ namespace SGE.Backend
                 };
             });
 
-            // 6. Configuración de Swagger UI con soporte para el botón "Authorizeeeee"
+            // 6. Configuración de Swagger UI
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
@@ -96,7 +96,7 @@ namespace SGE.Backend
 
             var app = builder.Build();
 
-            // 7. Inicialización del DbSeeder (Genera datos iniciales como el usuario admin)
+            // 7. Inicialización del DbSeeder
             using (var scope = app.Services.CreateScope())
             {
                 var services = scope.ServiceProvider;
@@ -117,17 +117,21 @@ namespace SGE.Backend
             app.UseSwaggerUI(c =>
             {
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "SGE Backend API v1");
-                c.RoutePrefix = string.Empty; // Carga Swagger en la raíz
+                c.RoutePrefix = string.Empty;
             });
 
             app.UseHttpsRedirection();
+
+            // =========================================================================
+            // 💡 ADICIÓN: HABILITAR ARCHIVOS ESTÁTICOS (Permite servir fotos desde wwwroot/uploads)
+            // =========================================================================
+            app.UseStaticFiles();
 
             // =========================================================================
             // 9. HABILITAR PIPELINE DE SEGURIDAD Y RED (ORDEN STRICTO)
             // =========================================================================
             app.UseRouting();
 
-            // ⚠️ IMPORTANTE: UseCors debe invocarse estrictamente ENTRE UseRouting y UseAuthentication
             app.UseCors("AllowBlazorApp");
 
             app.UseAuthentication();
