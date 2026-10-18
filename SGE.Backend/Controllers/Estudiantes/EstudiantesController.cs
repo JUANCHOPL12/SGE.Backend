@@ -129,6 +129,7 @@ namespace SGE.Backend.Controllers.Estudiantes
             return CreatedAtAction(nameof(GetEstudiantePorDocumento), new { documento = estudiante.NumeroDocumento }, dto);
         }
         // 4. Actualizar datos de Estudiante y su Equipo Opcional (RF-05, RF-06)
+        // 4. Actualizar datos de Estudiante y su Equipo Opcional (RF-05, RF-06)
         [HttpPut("{id}")]
         [Authorize(Roles = "Administrador,SuperAdmin")]
         public async Task<IActionResult> UpdateEstudiante(int id, [FromBody] EstudianteCreateUpdateDto dto)
@@ -142,6 +143,7 @@ namespace SGE.Backend.Controllers.Estudiantes
                 return NotFound(new { mensaje = "Estudiante no encontrado." });
             }
 
+            // 1. Actualizar datos del estudiante
             estudiante.NumeroDocumento = dto.Documento;
             estudiante.Nombres = dto.Nombres;
             estudiante.Apellidos = dto.Apellidos;
@@ -150,23 +152,35 @@ namespace SGE.Backend.Controllers.Estudiantes
             estudiante.IdCarrera = dto.IdCarrera;
             estudiante.FotoPerfilUrl = dto.FotoPerfilUrl ?? estudiante.FotoPerfilUrl;
 
-            // Actualizar o crear equipo solo si vienen los datos completos
+            // 2. Actualizar o Vincular Equipo
             if (!string.IsNullOrWhiteSpace(dto.SerialEquipo)
-     && dto.IdMarca.HasValue && dto.IdMarca.Value > 0
-     && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
+                && dto.IdMarca.HasValue && dto.IdMarca.Value > 0
+                && dto.IdTipo.HasValue && dto.IdTipo.Value > 0)
             {
-                var equipo = new Equipo
-                {
-                    IdEstudiante = estudiante.IdEstudiante,
-                    Serial = dto.SerialEquipo,
-                    IdMarca = dto.IdMarca.Value,
-                    IdTipo = dto.IdTipo.Value,
-                    FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
-                    Estado = "Activo"
-                };
+                var equipoExistente = estudiante.Equipos.FirstOrDefault();
 
-                _context.Equipos.Add(equipo);
-                await _context.SaveChangesAsync();
+                if (equipoExistente != null)
+                {
+                    // ACTUALIZAR REGISTRO EXISTENTE
+                    equipoExistente.Serial = dto.SerialEquipo;
+                    equipoExistente.IdMarca = dto.IdMarca.Value;
+                    equipoExistente.IdTipo = dto.IdTipo.Value;
+                    equipoExistente.FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty;
+                }
+                else
+                {
+                    // INSERTAR SOLO SI NO TIENE EQUIPO PREVIO
+                    var nuevoEquipo = new Equipo
+                    {
+                        IdEstudiante = estudiante.IdEstudiante,
+                        Serial = dto.SerialEquipo,
+                        IdMarca = dto.IdMarca.Value,
+                        IdTipo = dto.IdTipo.Value,
+                        FotoEquipoUrl = dto.FotoEquipoUrl ?? string.Empty,
+                        Estado = "Activo"
+                    };
+                    _context.Equipos.Add(nuevoEquipo);
+                }
             }
 
             await _context.SaveChangesAsync();
