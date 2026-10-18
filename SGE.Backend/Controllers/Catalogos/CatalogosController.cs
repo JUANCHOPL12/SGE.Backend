@@ -81,5 +81,21 @@ namespace SGE.Backend.Controllers.Catalogos
 
             return Ok(tipos);
         }
+
+        // 5. Obtener todas las Porterías
+        [HttpGet("porterias")]
+        public async Task<IActionResult> GetPorterias()
+        {
+            var porterias = await _context.Porterias
+                .AsNoTracking()
+                .Select(p => new
+                {
+                    idPorteria = p.IdPorteria,
+                    nombrePorteria = p.NombrePorteria
+                })
+                .ToListAsync();
+
+            return Ok(porterias);
+        }
     }
 }

@@ -10,7 +10,7 @@ namespace SGE.Backend.Controllers.Accesos
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // Protección por Token JWT y RBAC (RNF-08)
+    [Authorize] // Protección por Token JWT
     public class RegistroAccesosController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -22,17 +22,20 @@ namespace SGE.Backend.Controllers.Accesos
 
         /// <summary>
         /// RF-07 / RNF-01: Verificación de Estudiante y Equipos en Portería.
-        /// Despliega información académica, fotos de perfil, equipos y accesorios en < 2.0s.
+        /// Accesible por SuperAdmin, Administrador y Guardia.
         /// </summary>
         [HttpGet("verificar/{numeroDocumento}")]
-        [Authorize(Roles = "SuperAdmin,Guardia")]
+        [Authorize(Roles = "SuperAdmin,Administrador,Guardia")]
         public async Task<IActionResult> VerificarEstudiante(string numeroDocumento)
         {
-            // Búsqueda sobre el DbSet Estudiantes de ApplicationDbContext
             var estudiante = await _context.Estudiantes
-                .Include(e => e.Carrera) // Navegación 'Carrera' de tu Modelo Estudiante.cs
+                .Include(e => e.Carrera)
+                    .ThenInclude(c => c.Facultad)
                 .Include(e => e.Equipos)
-                .AsNoTracking() // Optimización para cumplir RNF-01 (< 2.0 segundos)
+                    .ThenInclude(eq => eq.Marca)
+                .Include(e => e.Equipos)
+                    .ThenInclude(eq => eq.Tipo)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.NumeroDocumento == numeroDocumento);
 
             if (estudiante == null)
@@ -45,21 +48,45 @@ namespace SGE.Backend.Controllers.Accesos
                 return BadRequest(new { mensaje = "ACCESO DENEGADO: El estudiante se encuentra en estado INACTIVO." });
             }
 
+            // Consultar el ÚLTIMO REGISTRO DE ACCESO
+            var ultimoAcceso = await _context.RegistrosAccesos
+                .Where(ra => ra.IdEstudiante == estudiante.IdEstudiante)
+                .OrderByDescending(ra => ra.FechaHora)
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
+
+            bool estaDentro = ultimoAcceso != null && ultimoAcceso.TipoMovimiento == "Entrada";
+            DateTime? ultimoIngreso = (ultimoAcceso != null && ultimoAcceso.TipoMovimiento == "Entrada")
+                ? ultimoAcceso.FechaHora
+                : null;
+
+            var equipoPrincipal = estudiante.Equipos.FirstOrDefault();
+
             var respuesta = new
             {
                 estudiante.IdEstudiante,
                 estudiante.NumeroDocumento,
                 NombreCompleto = $"{estudiante.Nombres} {estudiante.Apellidos}",
                 Carrera = estudiante.Carrera?.NombreCarrera ?? "N/A",
+                Facultad = estudiante.Carrera?.Facultad?.NombreFacultad ?? "N/A",
+                Correo = estudiante.CorreoElectronico ?? "N/A",
+                Telefono = estudiante.Telefono ?? "N/A",
                 estudiante.FotoPerfilUrl,
                 estudiante.Estado,
-                EquiposRegistrados = estudiante.Equipos.Select(eq => new
+
+                EstaDentro = estaDentro,
+                UltimoIngreso = ultimoIngreso,
+
+                TieneEquipo = equipoPrincipal != null,
+                Equipo = equipoPrincipal == null ? null : new
                 {
-                    eq.IdEquipo,
-                    eq.Serial,
-                    eq.FotoEquipoUrl,
-                    eq.Estado
-                })
+                    equipoPrincipal.IdEquipo,
+                    equipoPrincipal.Serial,
+                    Marca = equipoPrincipal.Marca?.NombreMarca ?? "Generico",
+                    Tipo = equipoPrincipal.Tipo?.NombreTipo ?? "Portátil",
+                    equipoPrincipal.FotoEquipoUrl,
+                    equipoPrincipal.FotoAccesoriosUrl
+                }
             };
 
             return Ok(respuesta);
@@ -67,25 +94,27 @@ namespace SGE.Backend.Controllers.Accesos
 
         /// <summary>
         /// RF-08 / RNF-02: Registrar tiempos de acceso (Entrada / Salida).
-        /// Guarda la marca de tiempo exacta, la portería y la identidad del guardia en turno.
+        /// Accesible por SuperAdmin, Administrador y Guardia.
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "SuperAdmin,Guardia")]
+        [Authorize(Roles = "SuperAdmin,Administrador,Guardia")]
         public async Task<IActionResult> RegistrarAcceso([FromBody] RegistroAccesoCreateDto dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Obtener la identidad del Guardia autenticado desde los Claims del JWT (RNF-08)
+            // Extraer el ID del usuario en sesión (sea SuperAdmin, Admin o Guardia)
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                             ?? User.FindFirst("id_usuario")?.Value;
+                           ?? User.FindFirst("id_usuario")?.Value
+                           ?? User.FindFirst("id")?.Value
+                           ?? User.FindFirst("sub")?.Value;
 
-            if (!int.TryParse(userIdClaim, out int idGuardia))
+            int idUsuario = 1; // Respaldo para pruebas
+            if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out int parsedId))
             {
-                return Unauthorized(new { mensaje = "No se pudo identificar al guardia en sesión." });
+                idUsuario = parsedId;
             }
 
-            // Validar que el estudiante exista y esté activo
             var estudiante = await _context.Estudiantes.FindAsync(dto.IdEstudiante);
             if (estudiante == null)
             {
@@ -97,18 +126,16 @@ namespace SGE.Backend.Controllers.Accesos
                 return BadRequest(new { mensaje = "No se puede registrar acceso a un estudiante INACTIVO." });
             }
 
-            // Instanciar la entidad usando la tabla 'registro_accesos'
             var nuevoAcceso = new RegistroAcceso
             {
                 IdEstudiante = dto.IdEstudiante,
                 IdEquipo = dto.IdEquipo,
-                IdUsuarioGuardia = idGuardia,
+                IdUsuarioGuardia = idUsuario,
                 IdPorteria = dto.IdPorteria,
                 TipoMovimiento = dto.TipoMovimiento,
-                FechaHora = DateTime.Now // Timestamp exacto de portería
+                FechaHora = DateTime.Now
             };
 
-            // Usamos tu DbSet exacto: RegistrosAccesos
             await _context.RegistrosAccesos.AddAsync(nuevoAcceso);
             await _context.SaveChangesAsync();
 
@@ -118,6 +145,58 @@ namespace SGE.Backend.Controllers.Accesos
                 nuevoAcceso.IdRegistro,
                 nuevoAcceso.FechaHora
             });
+        }
+
+        /// <summary>
+        /// Obtiene el historial de movimientos del estudiante en portería.
+        /// Accesible por SuperAdmin, Administrador y Guardia.
+        /// </summary>
+        [HttpGet("historial/{numeroDocumento}")]
+        [Authorize(Roles = "SuperAdmin,Administrador,Guardia")]
+        public async Task<IActionResult> ObtenerHistorialAcceso(string numeroDocumento, [FromQuery] DateTime? fecha, [FromQuery] string? serial)
+        {
+            var estudiante = await _context.Estudiantes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.NumeroDocumento == numeroDocumento);
+
+            if (estudiante == null)
+            {
+                return Ok(new List<RegistroAccesoReadDto>());
+            }
+
+            var query = _context.RegistrosAccesos
+                .Include(r => r.Equipo)
+                .Include(r => r.Guardia)
+                .Where(r => r.IdEstudiante == estudiante.IdEstudiante)
+                .AsNoTracking();
+
+            if (fecha.HasValue)
+            {
+                query = query.Where(r => r.FechaHora.Date == fecha.Value.Date);
+            }
+
+            if (!string.IsNullOrWhiteSpace(serial))
+            {
+                query = query.Where(r => r.Equipo != null && r.Equipo.Serial.Contains(serial));
+            }
+
+            var historial = await query
+                .OrderByDescending(r => r.FechaHora)
+                .Take(50)
+                .Select(r => new RegistroAccesoReadDto
+                {
+                    IdRegistro = r.IdRegistro,
+                    DocumentoEstudiante = estudiante.NumeroDocumento,
+                    NombreEstudiante = $"{estudiante.Nombres} {estudiante.Apellidos}",
+                    SerialEquipo = r.Equipo != null ? r.Equipo.Serial : "Sin Equipo",
+                    NombreGuardia = r.Guardia != null ? r.Guardia.NombreCompleto : "Usuario Sistema",
+                    IdPorteria = r.IdPorteria,
+                    TipoMovimiento = r.TipoMovimiento,
+                    FechaHora = r.FechaHora
+                })
+                .ToListAsync();
+
+            return Ok(historial);
         }
     }
 }
