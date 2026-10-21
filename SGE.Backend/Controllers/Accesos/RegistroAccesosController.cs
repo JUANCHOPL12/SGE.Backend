@@ -198,5 +198,56 @@ namespace SGE.Backend.Controllers.Accesos
 
             return Ok(historial);
         }
+
+        /// <summary>
+        /// Reporte consolidado de movimientos para auditoría (Exclusivo SuperAdmin)
+        /// </summary>
+        [HttpGet("reporte")]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> ObtenerReporte(
+            [FromQuery] DateTime? fechaInicio,
+            [FromQuery] DateTime? fechaFin,
+            [FromQuery] string? documento,
+            [FromQuery] string? serial,
+            [FromQuery] string? tipoMovimiento)
+        {
+            var query = _context.RegistrosAccesos
+                .Include(r => r.Estudiante)
+                .Include(r => r.Equipo)
+                .Include(r => r.Guardia)
+                .AsNoTracking();
+
+            if (fechaInicio.HasValue)
+                query = query.Where(r => r.FechaHora.Date >= fechaInicio.Value.Date);
+
+            if (fechaFin.HasValue)
+                query = query.Where(r => r.FechaHora.Date <= fechaFin.Value.Date);
+
+            if (!string.IsNullOrWhiteSpace(documento))
+                query = query.Where(r => r.Estudiante.NumeroDocumento.Contains(documento));
+
+            if (!string.IsNullOrWhiteSpace(serial))
+                query = query.Where(r => r.Equipo != null && r.Equipo.Serial.Contains(serial));
+
+            if (!string.IsNullOrWhiteSpace(tipoMovimiento) && tipoMovimiento != "Todos")
+                query = query.Where(r => r.TipoMovimiento == tipoMovimiento);
+
+            var resultado = await query
+                .OrderByDescending(r => r.FechaHora)
+                .Select(r => new
+                {
+                    r.IdRegistro,
+                    DocumentoEstudiante = r.Estudiante.NumeroDocumento,
+                    NombreEstudiante = $"{r.Estudiante.Nombres} {r.Estudiante.Apellidos}",
+                    SerialEquipo = r.Equipo != null ? r.Equipo.Serial : "Sin Equipo",
+                    MarcaEquipo = r.Equipo != null && r.Equipo.Marca != null ? r.Equipo.Marca.NombreMarca : "N/A",
+                    NombreGuardia = r.Guardia != null ? r.Guardia.NombreCompleto : "Sistema",
+                    r.TipoMovimiento,
+                    r.FechaHora
+                })
+                .ToListAsync();
+
+            return Ok(resultado);
+        }
     }
 }
